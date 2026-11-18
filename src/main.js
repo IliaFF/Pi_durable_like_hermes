@@ -2,7 +2,7 @@ import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { setTimeout as delay } from 'node:timers/promises';
-import { ModelRuntime } from '@earendil-works/pi-coding-agent';
+import { getAgentDir, ModelRuntime } from '@earendil-works/pi-coding-agent';
 import { answerInput } from './agent.js';
 import { createPlatforms, ApiError } from './platforms.js';
 import { openStore } from './store.js';
@@ -17,11 +17,14 @@ async function main() {
   if (!platforms.length) throw new Error('Configure at least one messaging platform.');
   const fallback = { provider: env.MODEL_PROVIDER ?? DEFAULT_MODEL.provider, modelId: env.MODEL_ID ?? DEFAULT_MODEL.modelId };
   if (!['openrouter', 'openai'].includes(fallback.provider)) throw new Error('Default model must use OpenRouter or OpenAI.');
-  const models = await ModelRuntime.create({ modelsPath: null, refreshOnCreate: false });
+  const data = env.DATA_DIR ?? './data';
+  const models = await ModelRuntime.create({
+    modelsPath: join(data, 'models.json'),
+    modelsStorePath: join(getAgentDir(), 'models-store.json'),
+  });
   if (!models.getModel(fallback.provider, fallback.modelId) || !await models.checkAuth(fallback.provider)) {
     throw new Error('Default model is not registered or its provider is not authenticated.');
   }
-  const data = env.DATA_DIR ?? './data';
   const directory = join(data, 'sessions');
   mkdirSync(directory, { recursive: true, mode: 0o700 });
   const lock = new DatabaseSync(join(data, 'worker-lock.sqlite'));
