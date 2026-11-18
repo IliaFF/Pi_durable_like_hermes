@@ -3,7 +3,8 @@
   "version": "1.0.0",
   "scripts": {
     "test": "node --test test/*.test.js",
-    "start": "node --env-file-if-exists=.env src/main.js"
+    "start": "node --env-file-if-exists=.env src/main.js",
+    "rollback:hermes": "systemctl --user stop pi-durable-hermes-health.timer pi-durable-hermes.service && systemctl --user start hermes-gateway.service && systemctl --user is-active hermes-gateway.service"
   },
   "repository": {
     "type": "git",

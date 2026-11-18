@@ -60,7 +60,7 @@ node scripts/import-memory.js "$HOME/.hermes/memories" "$DATA_DIR" "$TG_OWNER_ID
 
 Начало пробы: `systemctl --user start pi-durable-hermes.service pi-durable-hermes-health.timer`. Юнит остановит `hermes-gateway.service` через `Conflicts=`; не включайте обе службы в автозагрузку. При ошибке запуска сразу откатитесь. Проверка очередей каждые пять минут пишет в журнал количество зависших задач (старше 10 минут) и исходящих ответов с неизвестным исходом или ошибкой. Просмотр: `journalctl --user -u pi-durable-hermes-health.service`. Внешних уведомлений нет.
 
-Откат: `systemctl --user stop pi-durable-hermes-health.timer pi-durable-hermes.service`, затем `systemctl --user start hermes-gateway.service`. Новые переписки из пробного периода не переносятся обратно автоматически.
+**Откат на Hermes:** из корня проекта на сервере выполните `npm run rollback:hermes`. Команда остановит новый шлюз и таймер проверки, затем запустит Hermes и проверит, что его служба в состоянии `active`. Новые переписки из пробного периода не переносятся обратно автоматически.
 
 ### Резервная копия и проверка восстановления
 
