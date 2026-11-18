@@ -90,13 +90,18 @@ test('real Pi Durable runs memory and session_search tools without crossing scop
   let calls = 0;
   const models = fixtureModels((context) => {
     calls++;
-    if (calls === 1) return { type: 'toolCall', id: 'set-memory', name: 'memory', arguments: { file: 'USER.md', content: 'Люблю чай' } };
+    if (calls === 1) return { type: 'toolCall', id: 'set-memory', name: 'memory', arguments: {
+      file: 'USER.md', operations: [{ action: 'add', content: 'Люблю чай' }],
+    } };
     if (calls === 2) return 'Запомнил';
     if (calls === 3) return { type: 'toolCall', id: 'search', name: 'session_search', arguments: { query: 'Помни' } };
     const last = context.messages.at(-1);
     assert.equal(last.role, 'toolResult');
     assert.match(last.content[0].text, /Запомнил/);
     assert.doesNotMatch(last.content[0].text, /групп/);
+    if (calls === 4) return { type: 'toolCall', id: 'scroll', name: 'session_search', arguments: {
+      exchange_id: JSON.parse(last.content[0].text)[0].id,
+    } };
     return 'Нашёл';
   });
   const options = { directory, store, models, model };
@@ -106,7 +111,7 @@ test('real Pi Durable runs memory and session_search tools without crossing scop
   assert.equal(store.readMemory(scopeOf(input()), 'USER.md'), 'Люблю чай');
   assert.equal(store.readMemory(scopeOf(group), 'USER.md'), '');
   assert.equal(await answerInput({ ...options, row: store.nextInput() }), 'Нашёл');
-  assert.throws(() => store.writeMemory(scopeOf(input()), 'USER.md', 'x'.repeat(1376)));
+  assert.throws(() => store.editMemory(scopeOf(input()), 'USER.md', [{ action: 'add', content: 'x'.repeat(1376) }]));
 });
 
 test('SIGKILL during a real Pi Durable turn: resume once and reuse the stored answer', { timeout: 20_000 }, async (t) => {
