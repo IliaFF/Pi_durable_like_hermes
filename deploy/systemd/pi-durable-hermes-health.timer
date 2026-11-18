@@ -1,5 +1,6 @@
 [Unit]
 Description=Check Pi Durable message queues every five minutes
+PartOf=pi-durable-hermes.service
 
 [Timer]
 OnStartupSec=5min

@@ -33,7 +33,7 @@ export function telegramEvent(update, bot) {
     (['mention', 'bot_command'].includes(type) && m.text.slice(offset, offset + length).toLowerCase().endsWith(`@${bot.username.toLowerCase()}`)))) return;
   if (!id(m.chat.id) || !id(update.update_id)) return;
   return { platform: 'telegram', event: id(update.update_id), sender: id(m.from?.id), chat: id(m.chat.id), group,
-    thread: m.is_topic_message ? m.message_thread_id : undefined, message: m.message_id, text: m.text };
+    thread: m.is_topic_message ? m.message_thread_id : undefined, message: m.message_id, sentAt: m.date, text: m.text };
 }
 
 export function vkEvent(update, groupId) {
@@ -44,7 +44,7 @@ export function vkEvent(update, groupId) {
   if (group && m.reply_message?.from_id !== -Number(groupId) && !mentions.test(m.text)) return;
   const message = m.conversation_message_id || m.id;
   if (!id(message)) return;
-  return { platform: 'vk', event: `${m.peer_id}:${message}`, sender: id(m.from_id), chat: id(m.peer_id), group, text: m.text };
+  return { platform: 'vk', event: `${m.peer_id}:${message}`, sender: id(m.from_id), chat: id(m.peer_id), group, sentAt: m.date, text: m.text };
 }
 
 export function createPlatforms(env, fetcher = fetch) {

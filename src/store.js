@@ -85,7 +85,7 @@ export function openStore(path) {
   const lookupNote = db.prepare('SELECT content FROM memory WHERE scope=? AND file=?');
   const insertNote = db.prepare('INSERT INTO memory VALUES(?,?,?)');
   const saveCursor = db.prepare('INSERT INTO cursors VALUES (?,?) ON CONFLICT(source) DO UPDATE SET value=excluded.value');
-  const saveReply = db.prepare('INSERT INTO outbox(id,text,random_id) VALUES(?,?,?) ON CONFLICT DO NOTHING');
+  const saveReply = db.prepare('INSERT INTO outbox(id,text,random_id,state) VALUES(?,?,?,?) ON CONFLICT DO NOTHING');
   return {
     close: () => db.close(),
     ingest(source, cursor, events) {
@@ -100,9 +100,11 @@ export function openStore(path) {
       }
     },
     cursor: (source) => db.prepare('SELECT value FROM cursors WHERE source=?').get(source)?.value,
-    nextInput: () => db.prepare('SELECT i.* FROM inbox i WHERE NOT EXISTS (SELECT 1 FROM outbox o WHERE o.id=i.id) ORDER BY i.id LIMIT 1').get(),
-    finish(id, text) {
-      while (!saveReply.run(id, text, randomInt(1, 2 ** 31)).changes) {
+    nextInput: (rollback = false) => db.prepare(`SELECT i.* FROM inbox i
+      WHERE (json_extract(i.payload,'$.text') IS '/hermes')=?
+        AND NOT EXISTS (SELECT 1 FROM outbox o WHERE o.id=i.id) ORDER BY i.id LIMIT 1`).get(Number(rollback)),
+    finish(id, text, state = 'pending') {
+      while (!saveReply.run(id, text, randomInt(1, 2 ** 31), state).changes) {
         if (db.prepare('SELECT 1 FROM outbox WHERE id=?').get(id)) return;
       }
     },

@@ -8,11 +8,12 @@ import { openrouterProvider } from '@earendil-works/pi-ai/providers/openrouter';
 import { answerInput } from './agent.js';
 import { createPlatforms, ApiError } from './platforms.js';
 import { openStore } from './store.js';
-import { deliver } from './worker.js';
+import { deliver, handleRollback } from './worker.js';
 
 async function main() {
   process.umask(0o077);
   const env = process.env;
+  const owners = { telegram: env.TELEGRAM_ROLLBACK_OWNER_ID, vk: env.VK_ROLLBACK_OWNER_ID };
   const platforms = createPlatforms(env);
   if (!platforms.length) throw new Error('Configure at least one messaging platform.');
   const provider = env.MODEL_PROVIDER ?? 'openrouter';
@@ -46,6 +47,7 @@ async function main() {
     await Promise.all([
       ...platforms.map((platform) => loop(() => platform.poll(store, stop.signal), platform.name)),
       ...platforms.map((platform) => loop(async () => { if (!await deliver(store, platform)) await delay(300); }, platform.name)),
+      loop(async () => { if (!await handleRollback(store, owners)) await delay(300); }, 'rollback'),
       loop(async () => {
         const row = store.nextInput();
         if (!row) return delay(300);
