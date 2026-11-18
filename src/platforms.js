@@ -32,8 +32,10 @@ export function telegramEvent(update, bot) {
     (type === 'text_mention' && user?.id === bot.id) ||
     (['mention', 'bot_command'].includes(type) && m.text.slice(offset, offset + length).toLowerCase().endsWith(`@${bot.username.toLowerCase()}`)))) return;
   if (!id(m.chat.id) || !id(update.update_id)) return;
+  const [command] = m.text.split(/\s/, 1);
+  const text = command.toLowerCase() === `/model@${bot.username.toLowerCase()}` ? `/model${m.text.slice(command.length)}` : m.text;
   return { platform: 'telegram', event: id(update.update_id), sender: id(m.from?.id), chat: id(m.chat.id), group,
-    thread: m.is_topic_message ? m.message_thread_id : undefined, message: m.message_id, sentAt: m.date, text: m.text };
+    thread: m.is_topic_message ? m.message_thread_id : undefined, message: m.message_id, sentAt: m.date, text };
 }
 
 export function vkEvent(update, groupId) {

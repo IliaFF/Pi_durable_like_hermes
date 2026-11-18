@@ -2,13 +2,12 @@ import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { setTimeout as delay } from 'node:timers/promises';
-import { createModels } from '@earendil-works/pi-ai/models';
-import { openaiProvider } from '@earendil-works/pi-ai/providers/openai';
-import { openrouterProvider } from '@earendil-works/pi-ai/providers/openrouter';
+import { ModelRuntime } from '@earendil-works/pi-coding-agent';
 import { answerInput } from './agent.js';
 import { createPlatforms, ApiError } from './platforms.js';
 import { openStore } from './store.js';
 import { deliver, handleRollback } from './worker.js';
+import { DEFAULT_MODEL, modelCommand, selectedModel } from './model-command.js';
 
 async function main() {
   process.umask(0o077);
@@ -16,13 +15,12 @@ async function main() {
   const owners = { telegram: env.TELEGRAM_ROLLBACK_OWNER_ID, vk: env.VK_ROLLBACK_OWNER_ID };
   const platforms = createPlatforms(env);
   if (!platforms.length) throw new Error('Configure at least one messaging platform.');
-  const provider = env.MODEL_PROVIDER ?? 'openrouter';
-  const modelId = env.MODEL_ID;
-  const factory = { openrouter: openrouterProvider, openai: openaiProvider }[provider];
-  if (!factory || !modelId || !env[`${provider.toUpperCase()}_API_KEY`]) throw new Error('Configure MODEL_PROVIDER, MODEL_ID and the provider API key.');
-  const models = createModels();
-  models.setProvider(factory());
-  if (!models.getModel(provider, modelId)) throw new Error('The configured model is not registered in Pi AI.');
+  const fallback = { provider: env.MODEL_PROVIDER ?? DEFAULT_MODEL.provider, modelId: env.MODEL_ID ?? DEFAULT_MODEL.modelId };
+  if (!['openrouter', 'openai'].includes(fallback.provider)) throw new Error('Default model must use OpenRouter or OpenAI.');
+  const models = await ModelRuntime.create({ modelsPath: null, refreshOnCreate: false });
+  if (!models.getModel(fallback.provider, fallback.modelId) || !await models.checkAuth(fallback.provider)) {
+    throw new Error('Default model is not registered or its provider is not authenticated.');
+  }
   const data = env.DATA_DIR ?? './data';
   const directory = join(data, 'sessions');
   mkdirSync(directory, { recursive: true, mode: 0o700 });
@@ -51,7 +49,8 @@ async function main() {
       loop(async () => {
         const row = store.nextInput();
         if (!row) return delay(300);
-        const text = await answerInput({ directory, store, models, model: { provider, modelId }, row });
+        const command = await modelCommand(store, models, fallback, row, owners);
+        const text = command ?? await answerInput({ directory, store, models, model: await selectedModel(store, models, row, fallback, owners), row });
         store.finish(row.id, text);
       }, 'agent'),
     ]);

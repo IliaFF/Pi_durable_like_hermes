@@ -73,6 +73,9 @@ export function openStore(path) {
       id INTEGER PRIMARY KEY REFERENCES inbox(id), text TEXT NOT NULL, random_id INTEGER NOT NULL UNIQUE,
       state TEXT NOT NULL DEFAULT 'pending', attempts INTEGER NOT NULL DEFAULT 0, due INTEGER NOT NULL DEFAULT 0
     );
+    CREATE TABLE IF NOT EXISTS chat_models (
+      scope TEXT PRIMARY KEY, provider TEXT NOT NULL, model_id TEXT NOT NULL
+    );
     CREATE TABLE IF NOT EXISTS memory (
       scope TEXT NOT NULL, file TEXT NOT NULL, content TEXT NOT NULL, PRIMARY KEY(scope, file)
     );
@@ -115,6 +118,12 @@ export function openStore(path) {
       WHERE i.platform=? AND o.state='pending' AND o.due<=? ORDER BY o.id LIMIT 1`).get(platform, now),
     sending: (id) => db.prepare("UPDATE outbox SET state='sending', attempts=attempts+1 WHERE id=?").run(id),
     sendState: (id, state, due = 0) => db.prepare('UPDATE outbox SET state=?, due=? WHERE id=?').run(state, due, id),
+    getChatModel: (scope) => db.prepare('SELECT provider, model_id AS modelId FROM chat_models WHERE scope=?').get(scope),
+    setChatModel(scope, model) {
+      if (!model) db.prepare('DELETE FROM chat_models WHERE scope=?').run(scope);
+      else db.prepare(`INSERT INTO chat_models VALUES (?,?,?) ON CONFLICT(scope) DO UPDATE
+        SET provider=excluded.provider, model_id=excluded.model_id`).run(scope, model.provider, model.modelId);
+    },
     readMemory: (scope, file) => lookupNote.get(scope, file)?.content ?? '',
     editMemory(scope, file, operations) {
       db.exec('BEGIN IMMEDIATE');

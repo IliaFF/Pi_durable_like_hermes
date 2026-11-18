@@ -8,7 +8,7 @@ export function fixtureModels(onRequest) {
   const template = openaiProvider().getModels().find((m) => m.id === 'gpt-4.1-mini');
   const stream = (m, context) => {
     const events = createAssistantMessageEventStream();
-    const response = onRequest(context);
+    const response = onRequest(context, m);
     if (response === undefined) return events;
     const stopReason = typeof response === 'string' ? 'stop' : 'toolUse';
     const message = { role: 'assistant', api: m.api, provider: m.provider, model: m.id, timestamp: Date.now(),
@@ -18,6 +18,6 @@ export function fixtureModels(onRequest) {
     events.push({ type: 'done', reason: stopReason, message });
     return events;
   };
-  models.setProvider(createProvider({ id: model.provider, auth: { apiKey: { name: 'Fixture', resolve: async () => ({ auth: { apiKey: 'test' } }) } }, models: [{ ...template, provider: model.provider, id: model.modelId }], api: { stream, streamSimple: stream } }));
+  models.setProvider(createProvider({ id: model.provider, auth: { apiKey: { name: 'Fixture', resolve: async () => ({ auth: { apiKey: 'test' } }) } }, models: [model.modelId, 'other'].map((id) => ({ ...template, provider: model.provider, id })), api: { stream, streamSimple: stream } }));
   return models;
 }
