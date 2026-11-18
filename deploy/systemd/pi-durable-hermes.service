@@ -1,0 +1,16 @@
+[Unit]
+Description=Pi Durable assistant for Telegram and VK
+Conflicts=hermes-gateway.service
+After=hermes-gateway.service
+
+[Service]
+EnvironmentFile=%h/.config/pi-durable-hermes/service.env
+EnvironmentFile=%h/.config/pi-durable-hermes/bots.env
+ExecStart=/bin/sh -c 'exec "$$NODE" "$$APP_DIR/src/main.js"'
+UMask=0077
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+
+[Install]
+WantedBy=default.target

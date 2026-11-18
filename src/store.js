@@ -1,8 +1,15 @@
 import { randomInt } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 
+export const memoryLimits = Object.freeze({ 'MEMORY.md': 2200, 'USER.md': 1375 });
+
 export function scopeOf({ platform, chat, group, thread }) {
   return JSON.stringify([platform, group ? 'group' : 'private', chat, thread ?? null]);
+}
+
+function validateNote(file, content) {
+  const limit = Object.hasOwn(memoryLimits, file) ? memoryLimits[file] : 0;
+  if (!limit || [...content].length > limit) throw new Error(`Недопустимый файл или превышен лимит (${limit} символов).`);
 }
 
 export function openStore(path) {
@@ -23,7 +30,12 @@ export function openStore(path) {
       scope TEXT NOT NULL, file TEXT NOT NULL, content TEXT NOT NULL, PRIMARY KEY(scope, file)
     );
   `);
-  const put = db.prepare('INSERT INTO inbox(platform,event,scope,payload) VALUES (?,?,?,?) ON CONFLICT(platform,event) DO NOTHING');
+  if (!db.prepare('PRAGMA table_info(inbox)').all().some(({ name }) => name === 'received_at')) {
+    db.exec('ALTER TABLE inbox ADD COLUMN received_at INTEGER NOT NULL DEFAULT 0');
+  }
+  const put = db.prepare('INSERT INTO inbox(platform,event,scope,payload,received_at) VALUES (?,?,?,?,unixepoch()) ON CONFLICT(platform,event) DO NOTHING');
+  const lookupNote = db.prepare('SELECT content FROM memory WHERE scope=? AND file=?');
+  const insertNote = db.prepare('INSERT INTO memory VALUES(?,?,?)');
   const saveCursor = db.prepare('INSERT INTO cursors VALUES (?,?) ON CONFLICT(source) DO UPDATE SET value=excluded.value');
   const saveReply = db.prepare('INSERT INTO outbox(id,text,random_id) VALUES(?,?,?) ON CONFLICT DO NOTHING');
   return {
@@ -53,11 +65,30 @@ export function openStore(path) {
       WHERE i.platform=? AND o.state='pending' AND o.due<=? ORDER BY o.id LIMIT 1`).get(platform, now),
     sending: (id) => db.prepare("UPDATE outbox SET state='sending', attempts=attempts+1 WHERE id=?").run(id),
     sendState: (id, state, due = 0) => db.prepare('UPDATE outbox SET state=?, due=? WHERE id=?').run(state, due, id),
-    readMemory: (scope, file) => db.prepare('SELECT content FROM memory WHERE scope=? AND file=?').get(scope, file)?.content ?? '',
+    readMemory: (scope, file) => lookupNote.get(scope, file)?.content ?? '',
     writeMemory(scope, file, content) {
-      const limit = { 'MEMORY.md': 2200, 'USER.md': 1375 }[file];
-      if (!limit || [...content].length > limit) throw new Error(`Недопустимый файл или превышен лимит (${limit ?? 0} символов).`);
+      validateNote(file, content);
       db.prepare('INSERT INTO memory VALUES(?,?,?) ON CONFLICT(scope,file) DO UPDATE SET content=excluded.content').run(scope, file, content);
+    },
+    importNotes(entries, apply) {
+      db.exec('BEGIN IMMEDIATE');
+      try {
+        const plan = entries.map(({ scope, file, content }) => {
+          validateNote(file, content);
+          const existing = lookupNote.get(scope, file);
+          return { scope, file, chars: [...content].length, action: !existing ? 'insert' : existing.content === content ? 'unchanged' : 'conflict' };
+        });
+        if (apply && !plan.some(({ action }) => action === 'conflict')) {
+          for (const [index, entry] of entries.entries()) {
+            if (plan[index].action === 'insert') insertNote.run(entry.scope, entry.file, entry.content);
+          }
+          db.exec('COMMIT');
+        } else db.exec('ROLLBACK');
+        return plan;
+      } catch (error) {
+        db.exec('ROLLBACK');
+        throw error;
+      }
     },
     search(scope, query, before) {
       // shortcut: substring search over the current chat; use FTS when large histories justify it.
